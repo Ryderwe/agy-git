@@ -38,3 +38,8 @@ chmod +x install.sh && ./install.sh
 ```
 
 > 独立运行，无需依赖其他插件。macOS 下冷启动若未检测到调试端口，插件会自动带参数重启一次以挂载右上角入口（内置防循环保护）。安装或更新后重启 Antigravity 即可生效。
+
+## 交流与反馈
+
+- 欢迎前往 [Linux.do](https://linux.do) 社区交流讨论
+- 问题反馈与建议请提交 [GitHub Issues](https://github.com/Ryderwe/agy-git/issues)
