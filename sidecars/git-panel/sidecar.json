@@ -1,0 +1,26 @@
+{
+  "command": "node",
+  "args": [
+    "main.mjs"
+  ],
+  "env": {
+    "AGY_GIT_VERSION": "1.0.0"
+  },
+  "restart_policy": "always",
+  "display_name": "Git Control",
+  "description": "Top-right titlebar Git panel for staging, unstaging, committing, and pushing.",
+  "has_web_ui": true,
+  "agent_permissions": {
+    "allows_user_interactions": false
+  },
+  "ui_config": {
+    "display_name": "Git Control",
+    "views": [
+      {
+        "path": "/",
+        "entrypoint": "SIDECAR_UI_ENTRYPOINT_AUX_PANE",
+        "title": "Git Control"
+      }
+    ]
+  }
+}
