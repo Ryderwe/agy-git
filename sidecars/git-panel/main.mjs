@@ -16,6 +16,7 @@ import {
   getCommitDetail,
   getDiff,
   getLog,
+  getRemoteCommits,
   getStatus,
   listTags,
   loadSettings,
@@ -116,6 +117,7 @@ async function handleRpc(method, params = {}) {
     case 'fetch': return fetchChanges(params.repo);
     case 'checkout': return checkoutBranch(params.repo, params.branch, Boolean(params.create));
     case 'log': return getLog(params.repo, params.limit);
+    case 'remoteCommits': return getRemoteCommits(params.repo, Boolean(params.doFetch), params.limit);
     case 'commitDetail': return getCommitDetail(params.repo, params.hash);
     case 'reset': return resetToCommit(params.repo, params.hash, params.mode);
     case 'revert': return revertCommit(params.repo, params.hash);
@@ -241,7 +243,7 @@ async function pollCdp() {
       } else {
         try {
           const chk = await clients.get(target.id).client.send('Runtime.evaluate', {
-            expression: `Boolean(globalThis.__agyGit?.version === '1.3.0')`,
+            expression: `Boolean(globalThis.__agyGit?.version === '1.4.0')`,
             returnByValue: true
           });
           if (chk?.result?.value !== true) {

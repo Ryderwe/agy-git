@@ -328,6 +328,57 @@ export async function getCommitDetail(repoPath, hash) {
   return stdout;
 }
 
+function parseLogOutput(stdout) {
+  const sep = '\x1f';
+  const recSep = '\x1e';
+  return String(stdout || '')
+    .split(recSep)
+    .map(r => r.trim())
+    .filter(Boolean)
+    .map(rec => {
+      const [hash, shortHash, author, date, refs, subject] = rec.split(sep);
+      return {
+        hash: hash || '',
+        shortHash: shortHash || '',
+        author: author || '',
+        date: date || '',
+        refs: refs ? refs.split(',').map(s => s.trim()).filter(Boolean) : [],
+        subject: subject || ''
+      };
+    });
+}
+
+export async function getRemoteCommits(repoPath, doFetch = false, limit = 30) {
+  const root = await resolveRepoRoot(repoPath);
+  if (doFetch) {
+    await runGit(root, ['fetch', '--all', '--prune'], 60000);
+  }
+  const st = await getStatus(root);
+  if (!st.upstream) {
+    return { upstream: '', incoming: [], remoteLog: [], status: st };
+  }
+  const sep = '\x1f';
+  const recSep = '\x1e';
+  const format = `%H${sep}%h${sep}%an${sep}%ar${sep}%D${sep}%s${recSep}`;
+  const count = Math.min(Math.max(Number(limit) || 30, 1), 100);
+  let incoming = [];
+  let remoteLog = [];
+  try {
+    const { stdout } = await runGit(root, ['log', `HEAD..${st.upstream}`, `-n${count}`, `--pretty=format:${format}`]);
+    incoming = parseLogOutput(stdout);
+  } catch {}
+  try {
+    const { stdout } = await runGit(root, ['log', st.upstream, `-n${count}`, `--pretty=format:${format}`]);
+    remoteLog = parseLogOutput(stdout);
+  } catch {}
+  return {
+    upstream: st.upstream,
+    incoming,
+    remoteLog,
+    status: st
+  };
+}
+
 export async function resetToCommit(repoPath, hash, mode = 'soft') {
   const root = await resolveRepoRoot(repoPath);
   if (!hash || !/^[a-fA-F0-9]{4,40}$/.test(hash.trim())) {

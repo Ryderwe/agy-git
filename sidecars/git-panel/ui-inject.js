@@ -1,5 +1,5 @@
 (() => {
-  if (globalThis.__agyGit?.version === '1.3.0') return;
+  if (globalThis.__agyGit?.version === '1.4.0') return;
   try { globalThis.__agyGit?.dispose?.(); } catch {}
 
   const STYLE_ID = 'agy-git-styles';
@@ -53,6 +53,8 @@
     recentRepos: [],
     status: null,
     logs: [],
+    historyView: 'local', // 'local' | 'remote'
+    remoteInfo: { upstream: '', incoming: [], remoteLog: [] },
     tags: [],
     commitMsg: '',
     loading: false,
@@ -506,7 +508,11 @@
       localStorage.setItem('agy-git-repo', st.root);
       state.error = '';
       if (state.open && state.tab === 'history') {
-        state.logs = await callHost('log', { repo: st.root, limit: 50 });
+        if (state.historyView === 'remote') {
+          state.remoteInfo = await callHost('remoteCommits', { repo: st.root, doFetch: false, limit: 30 });
+        } else {
+          state.logs = await callHost('log', { repo: st.root, limit: 50 });
+        }
       } else if (state.open && state.tab === 'tags') {
         state.tags = await callHost('tags', { repo: st.root });
       }
@@ -710,6 +716,11 @@
         ` : ''}
 
         ${st && state.tab === 'history' ? `
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+            <button class="agy-git-btn ${state.historyView === 'local' ? 'agy-git-btn-primary' : ''}" data-hist-view="local">本地提交</button>
+            <button class="agy-git-btn ${state.historyView === 'remote' ? 'agy-git-btn-primary' : ''}" data-hist-view="remote">远程提交${st.behind ? ` (待拉取 ${st.behind})` : ''}</button>
+            ${state.historyView === 'remote' ? `<button class="agy-git-icon-btn" style="margin-left:auto;" id="agy-git-remote-fetch" ${busy ? 'disabled' : ''}>↻ 检查远程</button>` : ''}
+          </div>
           ${state.confirmReset ? `
             <div class="agy-git-msg-err" style="display:flex;flex-direction:column;gap:6px;">
               <div>确认将当前分支 <b>${escapeHtml(st.branch)}</b> ${state.confirmReset.mode === 'hard' ? '彻底 Hard 回退' : 'Soft 回退'}到 <code>${escapeHtml(state.confirmReset.shortHash)}</code>？${state.confirmReset.mode === 'hard' ? '（未提交的本地修改将被丢弃！）' : '（改动会保留在暂存区）'}</div>
@@ -728,27 +739,70 @@
               <div class="agy-git-diff-box">${escapeHtml(state.selectedCommit.detail)}</div>
             </div>
           ` : ''}
-          <div style="display:flex;flex-direction:column;gap:6px;">
-            ${state.logs.length ? state.logs.map(c => `
-              <div class="agy-git-commit-item">
-                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                  <span class="agy-git-hash">${escapeHtml(c.shortHash)}</span>
-                  <span style="font-weight:600;flex:1;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(c.subject)}">${escapeHtml(c.subject)}</span>
-                </div>
-                ${c.refs.length ? `<div style="display:flex;gap:4px;flex-wrap:wrap;">${c.refs.map(r => `<span class="agy-git-ref-pill">${escapeHtml(r)}</span>`).join('')}</div>` : ''}
-                <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;opacity:0.72;gap:6px;">
-                  <span>${escapeHtml(c.author)} · ${escapeHtml(c.date)}</span>
-                  <div style="display:flex;gap:3px;">
-                    <button class="agy-git-icon-btn" data-commit-detail="${escapeHtml(c.hash)}" data-commit-short="${escapeHtml(c.shortHash)}" title="查看改动">详情</button>
-                    <button class="agy-git-icon-btn" data-commit-tag="${escapeHtml(c.shortHash)}" title="在此提交打 Tag">Tag</button>
-                    <button class="agy-git-icon-btn" data-reset-ask="${escapeHtml(c.hash)}" data-reset-short="${escapeHtml(c.shortHash)}" data-reset-mode="soft" title="Soft 回退（保留改动）">Soft</button>
-                    <button class="agy-git-icon-btn" style="color:#f87171;" data-reset-ask="${escapeHtml(c.hash)}" data-reset-short="${escapeHtml(c.shortHash)}" data-reset-mode="hard" title="Hard 回退（丢弃未提交改动）">Hard</button>
-                    <button class="agy-git-icon-btn" data-revert-hash="${escapeHtml(c.hash)}" title="Revert（生成反向提交）">Revert</button>
+          ${state.historyView === 'local' ? `
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              ${state.logs.length ? state.logs.map(c => `
+                <div class="agy-git-commit-item">
+                  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                    <span class="agy-git-hash">${escapeHtml(c.shortHash)}</span>
+                    <span style="font-weight:600;flex:1;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(c.subject)}">${escapeHtml(c.subject)}</span>
+                  </div>
+                  ${c.refs.length ? `<div style="display:flex;gap:4px;flex-wrap:wrap;">${c.refs.map(r => `<span class="agy-git-ref-pill">${escapeHtml(r)}</span>`).join('')}</div>` : ''}
+                  <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;opacity:0.72;gap:6px;">
+                    <span>${escapeHtml(c.author)} · ${escapeHtml(c.date)}</span>
+                    <div style="display:flex;gap:3px;">
+                      <button class="agy-git-icon-btn" data-commit-detail="${escapeHtml(c.hash)}" data-commit-short="${escapeHtml(c.shortHash)}" title="查看改动">详情</button>
+                      <button class="agy-git-icon-btn" data-commit-tag="${escapeHtml(c.shortHash)}" title="在此提交打 Tag">Tag</button>
+                      <button class="agy-git-icon-btn" data-reset-ask="${escapeHtml(c.hash)}" data-reset-short="${escapeHtml(c.shortHash)}" data-reset-mode="soft" title="Soft 回退（保留改动）">Soft</button>
+                      <button class="agy-git-icon-btn" style="color:#f87171;" data-reset-ask="${escapeHtml(c.hash)}" data-reset-short="${escapeHtml(c.shortHash)}" data-reset-mode="hard" title="Hard 回退（丢弃未提交改动）">Hard</button>
+                      <button class="agy-git-icon-btn" data-revert-hash="${escapeHtml(c.hash)}" title="Revert（生成反向提交）">Revert</button>
+                    </div>
                   </div>
                 </div>
+              `).join('') : '<div style="font-size:12px;opacity:0.6;">暂无提交历史</div>'}
+            </div>
+          ` : `
+            ${!state.remoteInfo.upstream ? `<div style="font-size:12px;opacity:0.65;">当前分支尚未关联远程上游分支（可先执行 Push 建立关联）。</div>` : `
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                <span style="font-size:11.5px;opacity:0.78;">上游分支: <b>${escapeHtml(state.remoteInfo.upstream)}</b></span>
+                ${state.remoteInfo.incoming.length ? `<button class="agy-git-btn agy-git-btn-primary" id="agy-git-remote-pull" ${busy ? 'disabled' : ''}>↓ 拉取全部远程提交 (${state.remoteInfo.incoming.length})</button>` : ''}
               </div>
-            `).join('') : '<div style="font-size:12px;opacity:0.6;">暂无提交历史</div>'}
-          </div>
+              <div>
+                <div class="agy-git-section-hdr"><span>待拉取的远程提交 (${state.remoteInfo.incoming.length})</span></div>
+                <div style="display:flex;flex-direction:column;gap:5px;">
+                  ${state.remoteInfo.incoming.length ? state.remoteInfo.incoming.map(c => `
+                    <div class="agy-git-commit-item">
+                      <div style="display:flex;align-items:center;gap:6px;">
+                        <span class="agy-git-hash">${escapeHtml(c.shortHash)}</span>
+                        <span style="font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(c.subject)}">${escapeHtml(c.subject)}</span>
+                      </div>
+                      <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;opacity:0.72;">
+                        <span>${escapeHtml(c.author)} · ${escapeHtml(c.date)}</span>
+                        <button class="agy-git-icon-btn" data-commit-detail="${escapeHtml(c.hash)}" data-commit-short="${escapeHtml(c.shortHash)}">详情</button>
+                      </div>
+                    </div>
+                  `).join('') : '<div style="font-size:11.5px;opacity:0.55;padding:2px 4px;">本地已与远程同步，无待拉取提交</div>'}
+                </div>
+              </div>
+              <div>
+                <div class="agy-git-section-hdr"><span>远程分支最近提交 (${state.remoteInfo.remoteLog.length})</span></div>
+                <div style="display:flex;flex-direction:column;gap:5px;">
+                  ${state.remoteInfo.remoteLog.map(c => `
+                    <div class="agy-git-commit-item">
+                      <div style="display:flex;align-items:center;gap:6px;">
+                        <span class="agy-git-hash">${escapeHtml(c.shortHash)}</span>
+                        <span style="font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(c.subject)}">${escapeHtml(c.subject)}</span>
+                      </div>
+                      <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;opacity:0.72;">
+                        <span>${escapeHtml(c.author)} · ${escapeHtml(c.date)}</span>
+                        <button class="agy-git-icon-btn" data-commit-detail="${escapeHtml(c.hash)}" data-commit-short="${escapeHtml(c.shortHash)}">详情</button>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            `}
+          `}
         ` : ''}
 
         ${st && state.tab === 'tags' ? `
@@ -997,10 +1051,53 @@
         state.tab = nextTab;
         renderPopover();
         if (nextTab === 'history' && state.repo) {
-          try { state.logs = await callHost('log', { repo: state.repo, limit: 50 }); renderPopover(); } catch (err) { state.error = err.message; renderPopover(); }
+          try {
+            if (state.historyView === 'remote') {
+              state.remoteInfo = await callHost('remoteCommits', { repo: state.repo, doFetch: true, limit: 30 });
+              state.status = state.remoteInfo.status;
+            } else {
+              state.logs = await callHost('log', { repo: state.repo, limit: 50 });
+            }
+            renderTrigger();
+            renderPopover();
+          } catch (err) { state.error = err.message; renderPopover(); }
         } else if (nextTab === 'tags' && state.repo) {
           try { state.tags = await callHost('tags', { repo: state.repo }); renderPopover(); } catch (err) { state.error = err.message; renderPopover(); }
         }
+      });
+    });
+
+    pop.querySelectorAll('[data-hist-view]').forEach(el => {
+      el.addEventListener('click', async () => {
+        const view = el.getAttribute('data-hist-view');
+        state.historyView = view;
+        renderPopover();
+        if (view === 'remote' && state.repo) {
+          runAction('检查远程提交', async () => {
+            state.remoteInfo = await callHost('remoteCommits', { repo: state.repo, doFetch: true, limit: 30 });
+            state.status = state.remoteInfo.status;
+          });
+        } else if (view === 'local' && state.repo) {
+          try { state.logs = await callHost('log', { repo: state.repo, limit: 50 }); renderPopover(); } catch (err) { state.error = err.message; renderPopover(); }
+        }
+      });
+    });
+
+    pop.querySelector('#agy-git-remote-fetch')?.addEventListener('click', () => {
+      runAction('检查远程提交', async () => {
+        state.remoteInfo = await callHost('remoteCommits', { repo: state.repo, doFetch: true, limit: 30 });
+        state.status = state.remoteInfo.status;
+        setToast(`远程同步检查完成（待拉取 ${state.remoteInfo.incoming.length} 条）`);
+      });
+    });
+
+    pop.querySelector('#agy-git-remote-pull')?.addEventListener('click', () => {
+      runAction('拉取远程提交', async () => {
+        const res = await callHost('pull', { repo: state.repo });
+        state.status = res.status;
+        state.remoteInfo = await callHost('remoteCommits', { repo: state.repo, doFetch: false, limit: 30 });
+        state.logs = await callHost('log', { repo: state.repo, limit: 50 });
+        setToast(res.output || '已拉取全部远程提交');
       });
     });
 
@@ -1138,7 +1235,7 @@
   }, 2000);
 
   globalThis.__agyGit = {
-    version: '1.3.0',
+    version: '1.4.0',
     dispose() {
       clearInterval(timer);
       document.removeEventListener('click', docClickHandler);
