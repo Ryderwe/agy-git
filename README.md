@@ -23,6 +23,14 @@
 
 ## 安装方法
 
+### 方式一：发给 Agent 自动安装（推荐）
+
+把下面这段话直接发给 Antigravity 或其他可执行本地命令的 Agent：
+
+> 请帮我安装 Git Control (`agy-git`) 插件：https://github.com/Ryderwe/agy-git 。先克隆仓库到临时目录，阅读 README.md 后执行其中的安装脚本（或将插件文件复制到 `~/.gemini/config/plugins/agy-git`），保留其他插件、账户设置和聊天记录，不要强制退出当前客户端。安装完成后核对 `~/.gemini/config/plugins/agy-git/plugin.json` 版本并告诉我结果，需要重启时最后提醒我。
+
+### 方式二：命令行安装
+
 ```bash
 git clone https://github.com/Ryderwe/agy-git.git
 cd agy-git
