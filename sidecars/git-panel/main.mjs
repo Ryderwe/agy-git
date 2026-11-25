@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -131,6 +132,57 @@ async function handleRpc(method, params = {}) {
 
 const clients = new Map();
 let cdpConnected = false;
+let everConnected = false;
+let missingPortPolls = 0;
+
+const DATA_DIR = join(homedir(), '.gemini', 'antigravity', 'plugin_data', 'agy-git');
+const RELAUNCH_STATE_FILE = join(DATA_DIR, 'relaunch-state.json');
+
+function readRelaunchState() {
+  try {
+    if (existsSync(RELAUNCH_STATE_FILE)) return JSON.parse(readFileSync(RELAUNCH_STATE_FILE, 'utf8'));
+  } catch {}
+  return {};
+}
+
+function writeRelaunchState(state) {
+  try {
+    mkdirSync(DATA_DIR, { recursive: true });
+    writeFileSync(RELAUNCH_STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
+  } catch {}
+}
+
+function recordCdpReady() {
+  const prev = readRelaunchState();
+  if (prev.consecutiveAutoRelaunches) {
+    writeRelaunchState({ ...prev, consecutiveAutoRelaunches: 0 });
+  }
+}
+
+function maybeAutoRelaunchMac() {
+  if (process.platform !== 'darwin' || everConnected) return;
+  if (!process.env.ANTIGRAVITY_LS_ADDRESS || process.env.ELECTRON_OZONE_PLATFORM_HINT === 'headless') return;
+  const now = Date.now();
+  const state = readRelaunchState();
+  if (state.lastLsAddress === process.env.ANTIGRAVITY_LS_ADDRESS) return;
+  if (state.lastAt && now - state.lastAt < 60000) return;
+  if ((state.consecutiveAutoRelaunches || 0) >= 2) return;
+
+  const appCandidates = ['/Applications/Antigravity.app', join(homedir(), 'Applications', 'Antigravity.app')];
+  const appPath = appCandidates.find(p => existsSync(p));
+  if (!appPath) return;
+
+  writeRelaunchState({
+    ...state,
+    lastAt: now,
+    lastLsAddress: process.env.ANTIGRAVITY_LS_ADDRESS,
+    consecutiveAutoRelaunches: (state.consecutiveAutoRelaunches || 0) + 1
+  });
+
+  const script = `osascript -e 'tell application "Antigravity" to quit' >/dev/null 2>&1 || true; for i in $(seq 1 20); do pgrep -x Antigravity >/dev/null 2>&1 || break; sleep 0.25; done; open -a ${JSON.stringify(appPath)} --args --remote-debugging-port=0`;
+  const child = spawn('/bin/sh', ['-c', script], { detached: true, stdio: 'ignore' });
+  child.unref();
+}
 
 async function attachTarget(target) {
   const client = await connectCdp(target.webSocketDebuggerUrl);
@@ -158,6 +210,9 @@ async function attachTarget(target) {
   await client.send('Runtime.evaluate', { expression: UI_INJECT_SOURCE });
   clients.set(target.id, { client, origin, wsUrl: target.webSocketDebuggerUrl });
   cdpConnected = true;
+  everConnected = true;
+  missingPortPolls = 0;
+  recordCdpReady();
 }
 
 async function pollCdp() {
@@ -200,6 +255,10 @@ async function pollCdp() {
     }
   } catch {
     cdpConnected = clients.size > 0;
+    if (!everConnected && !clients.size) {
+      missingPortPolls++;
+      if (missingPortPolls >= 2) maybeAutoRelaunchMac();
+    }
   }
 }
 

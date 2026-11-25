@@ -37,4 +37,4 @@ cd agy-git
 chmod +x install.sh && ./install.sh
 ```
 
-> 依赖 Antigravity 调试端口（可配合 `agy-powertools` 自动带调试端口启动）。安装或更新后重启 Antigravity 即可生效。
+> 独立运行，无需依赖其他插件。macOS 下冷启动若未检测到调试端口，插件会自动带参数重启一次以挂载右上角入口（内置防循环保护）。安装或更新后重启 Antigravity 即可生效。
