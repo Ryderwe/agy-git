@@ -23,6 +23,7 @@ import {
   pullChanges,
   pushChanges,
   pushTag,
+  removeIndexLock,
   resetToCommit,
   revertCommit,
   saveAiSettings,
@@ -125,6 +126,7 @@ async function handleRpc(method, params = {}) {
     case 'createTag': return createTag(params.repo, params.name, params.message, params.target, Boolean(params.pushAfter));
     case 'pushTag': return pushTag(params.repo, params.name);
     case 'deleteTag': return deleteTag(params.repo, params.name);
+    case 'removeIndexLock': return removeIndexLock(params.repo);
     case 'generateCommitMsg': return generateCommitMessage(params.repo);
     case 'getAiSettings': return loadSettings().ai;
     case 'saveAiSettings': return saveAiSettings(params.ai);
@@ -243,7 +245,7 @@ async function pollCdp() {
       } else {
         try {
           const chk = await clients.get(target.id).client.send('Runtime.evaluate', {
-            expression: `Boolean(globalThis.__agyGit?.version === '1.4.0')`,
+            expression: `Boolean(globalThis.__agyGit?.version === '1.5.0')`,
             returnByValue: true
           });
           if (chk?.result?.value !== true) {

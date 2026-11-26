@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -462,6 +462,18 @@ export async function deleteTag(repoPath, name) {
     tags: await listTags(root),
     status: await getStatus(root)
   };
+}
+
+export async function removeIndexLock(repoPath) {
+  const root = await resolveRepoRoot(repoPath);
+  const { stdout } = await runGit(root, ['rev-parse', '--git-dir']);
+  const gitDirRaw = stdout.trim();
+  const gitDir = resolve(root, gitDirRaw);
+  const lockFile = join(gitDir, 'index.lock');
+  if (existsSync(lockFile)) {
+    unlinkSync(lockFile);
+  }
+  return getStatus(root);
 }
 
 export async function generateCommitMessage(repoPath) {

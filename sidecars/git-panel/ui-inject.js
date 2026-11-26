@@ -1,5 +1,5 @@
 (() => {
-  if (globalThis.__agyGit?.version === '1.4.0') return;
+  if (globalThis.__agyGit?.version === '1.5.0') return;
   try { globalThis.__agyGit?.dispose?.(); } catch {}
 
   const STYLE_ID = 'agy-git-styles';
@@ -637,7 +637,12 @@
       ` : ''}
 
       <div class="agy-git-body">
-        ${state.error ? `<div class="agy-git-msg-err">${escapeHtml(state.error)}</div>` : ''}
+        ${state.error ? `
+          <div class="agy-git-msg-err" style="display:flex;flex-direction:column;gap:6px;">
+            <div>${escapeHtml(state.error)}</div>
+            ${/index\.lock/i.test(state.error) ? `<div><button class="agy-git-btn" style="background:#ef4444;border-color:#ef4444;color:#fff;" id="agy-git-remove-lock" ${busy ? 'disabled' : ''}>🗑 一键删除 index.lock</button></div>` : ''}
+          </div>
+        ` : ''}
         ${state.toast ? `<div class="agy-git-msg-ok">${escapeHtml(state.toast)}</div>` : ''}
         ${state.busyAction ? `<div style="font-size:11.5px;opacity:0.75;">正在执行: ${escapeHtml(state.busyAction)}...</div>` : ''}
 
@@ -851,6 +856,13 @@
 
     // Bind events
     pop.querySelector('#agy-git-close')?.addEventListener('click', () => { state.open = false; renderPopover(); });
+    pop.querySelector('#agy-git-remove-lock')?.addEventListener('click', () => {
+      runAction('删除 index.lock', async () => {
+        state.status = await callHost('removeIndexLock', { repo: state.repo });
+        state.error = '';
+        setToast('已删除 index.lock，请重试刚才的操作');
+      });
+    });
     pop.querySelector('#agy-git-refresh')?.addEventListener('click', () => refreshStatus());
     pop.querySelector('#agy-git-toggle-repo')?.addEventListener('click', () => { state.showRepoInput = !state.showRepoInput; renderPopover(); });
     pop.querySelector('#agy-git-toggle-branch')?.addEventListener('click', () => { state.showBranchInput = !state.showBranchInput; renderPopover(); });
@@ -1235,7 +1247,7 @@
   }, 2000);
 
   globalThis.__agyGit = {
-    version: '1.4.0',
+    version: '1.5.0',
     dispose() {
       clearInterval(timer);
       document.removeEventListener('click', docClickHandler);
