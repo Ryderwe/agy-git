@@ -1,5 +1,5 @@
 (() => {
-  if (globalThis.__agyGit?.version === '1.5.3') return;
+  if (globalThis.__agyGit?.version === '1.5.4') return;
   try { globalThis.__agyGit?.dispose?.(); } catch {}
 
   const STYLE_ID = 'agy-git-styles';
@@ -530,10 +530,14 @@
     }
   }
 
-  async function runAction(label, fn) {
-    state.busyAction = label;
-    state.error = '';
-    renderPopover();
+  async function runAction(label, fn, { silent = false } = {}) {
+    if (!silent) {
+      state.busyAction = label;
+      state.error = '';
+      renderPopover();
+    } else {
+      state.error = '';
+    }
     try {
       await fn();
     } catch (err) {
@@ -580,6 +584,7 @@
       document.body.appendChild(pop);
     }
     pop.className = isLightTheme() ? 'agy-light' : '';
+    const prevBodyScrollTop = pop.querySelector('.agy-git-body')?.scrollTop || 0;
 
     const st = state.status;
     const repoLabel = st?.root ? st.root.split('/').filter(Boolean).pop() : (state.repo ? state.repo.split('/').filter(Boolean).pop() : '选择仓库');
@@ -966,14 +971,14 @@
       el.addEventListener('click', (e) => {
         e.stopPropagation();
         const file = el.getAttribute('data-stage');
-        runAction('暂存', async () => { state.status = await callHost('stage', { repo: state.repo, files: [file] }); });
+        runAction('暂存', async () => { state.status = await callHost('stage', { repo: state.repo, files: [file] }); }, { silent: true });
       });
     });
     pop.querySelectorAll('[data-unstage]').forEach(el => {
       el.addEventListener('click', (e) => {
         e.stopPropagation();
         const file = el.getAttribute('data-unstage');
-        runAction('取消暂存', async () => { state.status = await callHost('unstage', { repo: state.repo, files: [file] }); });
+        runAction('取消暂存', async () => { state.status = await callHost('unstage', { repo: state.repo, files: [file] }); }, { silent: true });
       });
     });
     pop.querySelectorAll('[data-discard-ask]').forEach(el => {
@@ -1228,6 +1233,11 @@
         });
       });
     });
+
+    const nextBody = pop.querySelector('.agy-git-body');
+    if (nextBody && prevBodyScrollTop > 0) {
+      nextBody.scrollTop = prevBodyScrollTop;
+    }
   }
 
   const docClickHandler = () => {
@@ -1250,7 +1260,7 @@
   }, 2000);
 
   globalThis.__agyGit = {
-    version: '1.5.3',
+    version: '1.5.4',
     dispose() {
       clearInterval(timer);
       document.removeEventListener('click', docClickHandler);
