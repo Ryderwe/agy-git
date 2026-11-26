@@ -5,8 +5,10 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  addRemoteAndPush,
   checkoutBranch,
   commitChanges,
+  createGithubRepoAndPush,
   createTag,
   deleteTag,
   discardFile,
@@ -18,6 +20,7 @@ import {
   getLog,
   getRemoteCommits,
   getStatus,
+  initRepo,
   listTags,
   loadSettings,
   pullChanges,
@@ -127,6 +130,9 @@ async function handleRpc(method, params = {}) {
     case 'pushTag': return pushTag(params.repo, params.name);
     case 'deleteTag': return deleteTag(params.repo, params.name);
     case 'removeIndexLock': return removeIndexLock(params.repo);
+    case 'initRepo': return initRepo(params.path);
+    case 'createGithubRepo': return createGithubRepoAndPush(params.repo, params);
+    case 'addRemotePush': return addRemoteAndPush(params.repo, params.url);
     case 'generateCommitMsg': return generateCommitMessage(params.repo);
     case 'getAiSettings': return loadSettings().ai;
     case 'saveAiSettings': return saveAiSettings(params.ai);
@@ -285,7 +291,7 @@ async function pollCdp() {
       } else {
         try {
           const chk = await clients.get(target.id).client.send('Runtime.evaluate', {
-            expression: `Boolean(globalThis.__agyGit?.version === '1.5.4')`,
+            expression: `Boolean(globalThis.__agyGit?.version === '1.6.0')`,
             returnByValue: true
           });
           if (chk?.result?.value !== true) {

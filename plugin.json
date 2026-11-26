@@ -1,7 +1,7 @@
 {
   "name": "agy-git",
   "displayName": "Git Control",
-  "version": "1.5.4",
+  "version": "1.6.0",
   "description": "原生右上角标题栏 Git 快捷面板：自动识别当前对话项目，支持查看变更与 Diff、暂存/取消暂存、AI 生成提交消息、提交、Push/Pull、提交历史回退与 Tag 管理。",
   "author": "Ryderwe",
   "homepage": "https://github.com/Ryderwe/agy-git",

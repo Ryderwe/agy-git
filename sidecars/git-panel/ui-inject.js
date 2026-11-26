@@ -1,5 +1,5 @@
 (() => {
-  if (globalThis.__agyGit?.version === '1.5.4') return;
+  if (globalThis.__agyGit?.version === '1.6.0') return;
   try { globalThis.__agyGit?.dispose?.(); } catch {}
 
   const STYLE_ID = 'agy-git-styles';
@@ -68,6 +68,9 @@
     showRepoInput: false,
     showBranchInput: false,
     showAiSettings: false,
+    showCreateRemote: false,
+    nonGitWorkspace: '',
+    remoteForm: { name: '', visibility: 'private', description: '', url: '' },
     aiSettings: { baseUrl: '', apiKey: '', model: '', language: 'zh-CN', scope: 'all' },
     newBranchName: '',
     confirmDiscard: ''
@@ -487,8 +490,17 @@
         state.recentRepos = res.recentRepos || [];
         if (res.repo) {
           state.repo = res.repo;
+          state.nonGitWorkspace = '';
           localStorage.setItem('agy-git-repo', res.repo);
           state.showRepoInput = false;
+        } else if (res.nonGitWorkspace) {
+          state.nonGitWorkspace = res.nonGitWorkspace;
+          state.repo = res.nonGitWorkspace;
+          state.status = null;
+          state.showRepoInput = false;
+          renderTrigger();
+          renderPopover();
+          return;
         } else if (!state.repo) {
           state.showRepoInput = true;
           renderPopover();
@@ -507,6 +519,7 @@
     try {
       const st = await callHost('status', { repo: repoOverride || state.repo });
       state.status = st;
+      state.nonGitWorkspace = '';
       state.repo = st.root;
       localStorage.setItem('agy-git-repo', st.root);
       state.error = '';
@@ -635,8 +648,32 @@
           <button class="agy-git-btn" id="agy-git-pull" ${busy ? 'disabled' : ''}>↓ Pull</button>
           <button class="agy-git-btn agy-git-btn-primary" id="agy-git-push" ${busy ? 'disabled' : ''}>↑ Push${st.ahead ? ` (${st.ahead})` : ''}</button>
           <button class="agy-git-btn" id="agy-git-fetch" ${busy ? 'disabled' : ''}>Fetch</button>
-          <span style="margin-left:auto;font-size:11px;opacity:0.65;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px;" title="${escapeHtml(st.lastCommit)}">${escapeHtml(st.lastCommit)}</span>
+          ${!st.hasOrigin ? `<button class="agy-git-icon-btn" id="agy-git-open-remote" title="创建或绑定远程仓库">+ 远程</button>` : ''}
+          <span style="margin-left:auto;font-size:11px;opacity:0.65;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px;" title="${escapeHtml(st.lastCommit)}">${escapeHtml(st.lastCommit)}</span>
         </div>
+        ${state.showCreateRemote ? `
+          <div style="padding:10px 12px;border-bottom:1px solid rgba(128,128,128,0.16);background:rgba(128,128,128,0.05);display:flex;flex-direction:column;gap:6px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <span style="font-weight:600;font-size:12px;">创建 GitHub 仓库并推送</span>
+              <button class="agy-git-icon-btn" id="agy-git-close-remote">✕</button>
+            </div>
+            <div style="display:flex;gap:6px;">
+              <input class="agy-git-input" id="agy-git-gh-name" placeholder="仓库名称" value="${escapeHtml(state.remoteForm.name || repoLabel)}" />
+              <select class="agy-git-input" style="width:96px;" id="agy-git-gh-vis">
+                <option value="private" ${state.remoteForm.visibility !== 'public' ? 'selected' : ''}>Private</option>
+                <option value="public" ${state.remoteForm.visibility === 'public' ? 'selected' : ''}>Public</option>
+              </select>
+            </div>
+            <input class="agy-git-input" id="agy-git-gh-desc" placeholder="仓库描述（可选）" value="${escapeHtml(state.remoteForm.description)}" />
+            <div style="display:flex;justify-content:flex-end;">
+              <button class="agy-git-btn agy-git-btn-primary" id="agy-git-gh-create" ${busy ? 'disabled' : ''}>创建 GitHub 仓库并 Push</button>
+            </div>
+            <div style="border-top:1px dashed rgba(128,128,128,0.22);padding-top:6px;display:flex;gap:6px;align-items:center;">
+              <input class="agy-git-input" id="agy-git-remote-url" placeholder="或绑定已有远程 URL (https://... / git@...)" value="${escapeHtml(state.remoteForm.url)}" />
+              <button class="agy-git-btn" id="agy-git-remote-bind" ${busy ? 'disabled' : ''}>绑定并 Push</button>
+            </div>
+          </div>
+        ` : ''}
         <div class="agy-git-tabs">
           <button class="agy-git-tab ${state.tab === 'changes' ? 'active' : ''}" data-tab="changes">变更 (${st.staged.length + st.unstaged.length})</button>
           <button class="agy-git-tab ${state.tab === 'history' ? 'active' : ''}" data-tab="history">历史</button>
@@ -858,7 +895,16 @@
           </div>
         ` : ''}
 
-        ${!st ? `<div style="font-size:12px;opacity:0.7;">请在上方输入或选择一个本地 Git 仓库路径。</div>` : ''}
+        ${!st ? `
+          <div style="display:flex;flex-direction:column;gap:8px;padding:6px 2px;">
+            <div style="font-size:12px;opacity:0.8;">${state.nonGitWorkspace || state.repo ? `目录 <code>${escapeHtml(state.nonGitWorkspace || state.repo)}</code> 尚未初始化 Git 仓库。` : '请在上方输入或选择一个本地目录路径。'}</div>
+            ${(state.nonGitWorkspace || state.repo) ? `
+              <div>
+                <button class="agy-git-btn agy-git-btn-primary" id="agy-git-init-repo" ${busy ? 'disabled' : ''}>⚡ 初始化 Git 仓库 (git init)</button>
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
       </div>
     `;
 
@@ -1031,12 +1077,73 @@
       });
     });
 
+    pop.querySelector('#agy-git-init-repo')?.addEventListener('click', () => {
+      const targetPath = state.nonGitWorkspace || state.repo;
+      if (!targetPath) return;
+      runAction('初始化 Git 仓库', async () => {
+        state.status = await callHost('initRepo', { path: targetPath });
+        state.nonGitWorkspace = '';
+        state.repo = state.status.root;
+        localStorage.setItem('agy-git-repo', state.status.root);
+        setToast('已初始化 Git 仓库');
+      });
+    });
+
+    pop.querySelector('#agy-git-open-remote')?.addEventListener('click', () => {
+      if (!state.remoteForm.name && state.repo) {
+        state.remoteForm.name = state.repo.split('/').filter(Boolean).pop() || '';
+      }
+      state.showCreateRemote = !state.showCreateRemote;
+      renderPopover();
+    });
+    pop.querySelector('#agy-git-close-remote')?.addEventListener('click', () => { state.showCreateRemote = false; renderPopover(); });
+    pop.querySelector('#agy-git-gh-name')?.addEventListener('input', (e) => { state.remoteForm.name = e.target.value; });
+    pop.querySelector('#agy-git-gh-vis')?.addEventListener('change', (e) => { state.remoteForm.visibility = e.target.value; });
+    pop.querySelector('#agy-git-gh-desc')?.addEventListener('input', (e) => { state.remoteForm.description = e.target.value; });
+    pop.querySelector('#agy-git-remote-url')?.addEventListener('input', (e) => { state.remoteForm.url = e.target.value; });
+
+    pop.querySelector('#agy-git-gh-create')?.addEventListener('click', () => {
+      const repoName = pop.querySelector('#agy-git-gh-name')?.value?.trim() || state.remoteForm.name;
+      const visibility = pop.querySelector('#agy-git-gh-vis')?.value || 'private';
+      const description = pop.querySelector('#agy-git-gh-desc')?.value || '';
+      runAction('创建 GitHub 仓库并推送', async () => {
+        const res = await callHost('createGithubRepo', {
+          repo: state.repo,
+          name: repoName,
+          visibility,
+          description
+        });
+        state.status = res.status;
+        state.showCreateRemote = false;
+        setToast(res.output || '已创建 GitHub 仓库');
+      });
+    });
+
+    pop.querySelector('#agy-git-remote-bind')?.addEventListener('click', () => {
+      const url = pop.querySelector('#agy-git-remote-url')?.value?.trim() || state.remoteForm.url;
+      runAction('绑定远程仓库并推送', async () => {
+        const res = await callHost('addRemotePush', { repo: state.repo, url });
+        state.status = res.status;
+        state.showCreateRemote = false;
+        state.remoteForm.url = '';
+        setToast(res.output || '已绑定远程仓库');
+      });
+    });
+
     pop.querySelector('#agy-git-commit-push')?.addEventListener('click', () => {
       runAction('提交并 Push', async () => {
         const cRes = await callHost('commit', { repo: state.repo, message: state.commitMsg });
         state.status = cRes.status;
         state.commitMsg = '';
         state.diffTarget = null;
+        if (!cRes.status?.hasOrigin) {
+          if (!state.remoteForm.name && state.repo) {
+            state.remoteForm.name = state.repo.split('/').filter(Boolean).pop() || '';
+          }
+          state.showCreateRemote = true;
+          setToast('已提交本地代码！当前无远程仓库，请在上方创建或绑定远程仓库');
+          return;
+        }
         const pRes = await callHost('push', { repo: state.repo });
         state.status = pRes.status;
         setToast('已提交并推送到远程');
@@ -1044,6 +1151,15 @@
     });
 
     pop.querySelector('#agy-git-push')?.addEventListener('click', () => {
+      if (state.status && !state.status.hasOrigin) {
+        if (!state.remoteForm.name && state.repo) {
+          state.remoteForm.name = state.repo.split('/').filter(Boolean).pop() || '';
+        }
+        state.showCreateRemote = true;
+        state.toast = '当前仓库尚未关联远程仓库，请在此创建 GitHub 仓库或绑定远程 URL';
+        renderPopover();
+        return;
+      }
       runAction('Push', async () => {
         const res = await callHost('push', { repo: state.repo });
         state.status = res.status;
@@ -1260,7 +1376,7 @@
   }, 2000);
 
   globalThis.__agyGit = {
-    version: '1.5.4',
+    version: '1.6.0',
     dispose() {
       clearInterval(timer);
       document.removeEventListener('click', docClickHandler);

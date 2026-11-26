@@ -158,6 +158,12 @@ export async function getStatus(repoPath) {
     lastCommit = lc.stdout.trim();
   } catch {}
 
+  let remotes = [];
+  try {
+    const rm = await runGit(root, ['remote']);
+    remotes = rm.stdout.split('\n').map(s => s.trim()).filter(Boolean);
+  } catch {}
+
   return {
     root,
     branch,
@@ -168,7 +174,9 @@ export async function getStatus(repoPath) {
     staged,
     unstaged,
     branches,
-    lastCommit
+    lastCommit,
+    remotes,
+    hasOrigin: remotes.includes('origin')
   };
 }
 
@@ -476,6 +484,98 @@ export async function removeIndexLock(repoPath) {
   return getStatus(root);
 }
 
+export async function initRepo(targetPath) {
+  if (!targetPath || typeof targetPath !== 'string') {
+    throw new Error('请先输入要初始化的目录路径');
+  }
+  const dir = resolve(targetPath.trim().replace(/^~/, homedir()));
+  if (!existsSync(dir)) {
+    throw new Error(`目录不存在: ${dir}`);
+  }
+  try {
+    await runGit(dir, ['init', '-b', 'main']);
+  } catch {
+    await runGit(dir, ['init']);
+  }
+  return getStatus(dir);
+}
+
+export async function addRemoteAndPush(repoPath, remoteUrl) {
+  const root = await resolveRepoRoot(repoPath);
+  const url = (remoteUrl || '').trim();
+  if (!url) throw new Error('请输入远程仓库地址');
+  const st = await getStatus(root);
+  if (st.hasOrigin) {
+    await runGit(root, ['remote', 'set-url', 'origin', url]);
+  } else {
+    await runGit(root, ['remote', 'add', 'origin', url]);
+  }
+  let hasHead = false;
+  try {
+    await runGit(root, ['rev-parse', '--verify', 'HEAD']);
+    hasHead = true;
+  } catch {}
+  if (!hasHead) {
+    return {
+      output: '已绑定 origin 远程仓库（当前尚无提交，请先提交后再 Push）',
+      status: await getStatus(root)
+    };
+  }
+  const res = await runGit(root, ['push', '-u', 'origin', st.branch], 60000);
+  return {
+    output: (res.stderr || res.stdout || '已绑定远程仓库并完成 Push').trim(),
+    status: await getStatus(root)
+  };
+}
+
+export async function createGithubRepoAndPush(repoPath, { name = '', visibility = 'private', description = '' } = {}) {
+  const root = await resolveRepoRoot(repoPath);
+  const repoName = (name || '').trim() || root.split('/').filter(Boolean).pop();
+  if (!repoName || /\s/.test(repoName)) {
+    throw new Error('请输入有效的 GitHub 仓库名称（不能包含空格）');
+  }
+  let hasHead = false;
+  try {
+    await runGit(root, ['rev-parse', '--verify', 'HEAD']);
+    hasHead = true;
+  } catch {}
+
+  const args = [
+    'repo', 'create', repoName,
+    visibility === 'public' ? '--public' : '--private',
+    '--source=.',
+    '--remote=origin'
+  ];
+  if (hasHead) args.push('--push');
+  if (description && description.trim()) {
+    args.push('--description', description.trim());
+  }
+
+  try {
+    const { stdout, stderr } = await execFileAsync('gh', args, {
+      cwd: root,
+      timeout: 60000,
+      maxBuffer: 10 * 1024 * 1024
+    });
+    const out = (stdout || stderr || '').trim();
+    return {
+      output: hasHead
+        ? (out || `已创建 GitHub 仓库 ${repoName} 并推送`)
+        : `已创建 GitHub 仓库 ${repoName} 并绑定 origin（当前尚无提交，请先提交后再 Push）`,
+      status: await getStatus(root)
+    };
+  } catch (err) {
+    const msg = (err.stderr || err.stdout || err.message || '').toString().trim();
+    if (/ENOENT|command not found/i.test(msg)) {
+      throw new Error('未检测到 GitHub CLI (gh)，请先安装 gh 或在下方直接填写已有远程仓库 URL');
+    }
+    if (/auth login|not logged/i.test(msg)) {
+      throw new Error('GitHub CLI 未登录，请先在终端执行 gh auth login，或在下方直接填写远程仓库 URL');
+    }
+    throw new Error(msg || '创建 GitHub 仓库失败');
+  }
+}
+
 export async function generateCommitMessage(repoPath) {
   const root = await resolveRepoRoot(repoPath);
   const st = await getStatus(root);
@@ -750,7 +850,9 @@ export async function discoverWorkspaceRepo(hintName = '', conversationId = '') 
           try {
             const root = await resolveRepoRoot(candidate);
             return { repo: root, recentRepos: [...new Set([root, ...settings.recentRepos])].slice(0, 12), autoDetected: true };
-          } catch {}
+          } catch {
+            return { repo: '', nonGitWorkspace: candidate, recentRepos: settings.recentRepos, autoDetected: false };
+          }
         }
       }
     }
