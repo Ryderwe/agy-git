@@ -1,5 +1,5 @@
 (() => {
-  if (globalThis.__agyGit?.version === '1.6.0') return;
+  if (globalThis.__agyGit?.version === '1.7.0') return;
   try { globalThis.__agyGit?.dispose?.(); } catch {}
 
   const STYLE_ID = 'agy-git-styles';
@@ -56,6 +56,10 @@
     historyView: 'local', // 'local' | 'remote'
     remoteInfo: { upstream: '', incoming: [], remoteLog: [] },
     tags: [],
+    wfRuns: [],
+    wfList: [],
+    selectedWfId: '',
+    selectedRun: null,
     commitMsg: '',
     loading: false,
     busyAction: '',
@@ -531,6 +535,10 @@
         }
       } else if (state.open && state.tab === 'tags') {
         state.tags = await callHost('tags', { repo: st.root });
+      } else if (state.open && state.tab === 'workflows') {
+        const wfData = await callHost('workflows', { repo: st.root, limit: 20 });
+        state.wfRuns = wfData.runs || [];
+        state.wfList = wfData.workflows || [];
       }
     } catch (err) {
       state.error = err.message;
@@ -678,6 +686,7 @@
           <button class="agy-git-tab ${state.tab === 'changes' ? 'active' : ''}" data-tab="changes">变更 (${st.staged.length + st.unstaged.length})</button>
           <button class="agy-git-tab ${state.tab === 'history' ? 'active' : ''}" data-tab="history">历史</button>
           <button class="agy-git-tab ${state.tab === 'tags' ? 'active' : ''}" data-tab="tags">Tag${state.tags.length ? ` (${state.tags.length})` : ''}</button>
+          <button class="agy-git-tab ${state.tab === 'workflows' ? 'active' : ''}" data-tab="workflows">工作流</button>
         </div>
       ` : ''}
 
@@ -892,6 +901,73 @@
                 </div>
               </div>
             `).join('') : '<div style="font-size:12px;opacity:0.55;">暂无本地 Tag</div>'}
+          </div>
+        ` : ''}
+
+        ${st && state.tab === 'workflows' ? `
+          <div style="display:flex;align-items:center;gap:6px;">
+            ${state.wfList.length ? `
+              <select class="agy-git-input" id="agy-git-wf-select" style="flex:1;">
+                ${state.wfList.map(w => `<option value="${escapeHtml(String(w.id))}" ${(state.selectedWfId || String(state.wfList[0]?.id)) === String(w.id) ? 'selected' : ''}>${escapeHtml(w.name)}</option>`).join('')}
+              </select>
+              <button class="agy-git-btn agy-git-btn-primary" id="agy-git-wf-trigger" ${busy ? 'disabled' : ''}>▶ 运行</button>
+            ` : '<span style="font-size:11.5px;opacity:0.65;flex:1;">GitHub Actions 工作流</span>'}
+            <button class="agy-git-icon-btn" id="agy-git-wf-refresh" ${busy ? 'disabled' : ''}>↻ 刷新</button>
+          </div>
+          ${state.selectedRun ? `
+            <div style="padding:8px;border-radius:8px;border:1px solid rgba(128,128,128,0.22);background:rgba(128,128,128,0.04);display:flex;flex-direction:column;gap:5px;">
+              <div class="agy-git-section-hdr" style="margin:0;">
+                <span>${escapeHtml(state.selectedRun.workflowName || 'Jobs')}</span>
+                <div style="display:flex;gap:4px;">
+                  ${state.selectedRun.url ? `<a href="${escapeHtml(state.selectedRun.url)}" target="_blank" rel="noreferrer" class="agy-git-icon-btn" style="text-decoration:none;">↗ GitHub</a>` : ''}
+                  <button class="agy-git-icon-btn" id="agy-git-wf-close-detail">关闭</button>
+                </div>
+              </div>
+              ${(state.selectedRun.jobs || []).map(job => {
+                const ok = job.conclusion === 'success';
+                const fail = job.conclusion === 'failure' || job.conclusion === 'cancelled';
+                const badge = job.status !== 'completed' ? '●' : (ok ? '✓' : (fail ? '✕' : '○'));
+                const color = job.status !== 'completed' ? '#38bdf8' : (ok ? '#22c55e' : (fail ? '#ef4444' : '#a1a1aa'));
+                return `<div style="font-size:11.5px;display:flex;align-items:center;gap:6px;">
+                  <span style="color:${color};font-weight:700;">${badge}</span>
+                  <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(job.name)}</span>
+                  <span style="opacity:0.6;font-size:11px;">${escapeHtml(job.conclusion || job.status)}</span>
+                </div>`;
+              }).join('') || '<div style="font-size:11.5px;opacity:0.6;">暂无 Job 信息</div>'}
+            </div>
+          ` : ''}
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            ${state.wfRuns.length ? state.wfRuns.map(r => {
+              const running = r.status !== 'completed';
+              const ok = r.conclusion === 'success';
+              const fail = r.conclusion === 'failure' || r.conclusion === 'timed_out';
+              const icon = running ? '●' : (ok ? '✓' : (fail ? '✕' : '○'));
+              const color = running ? '#38bdf8' : (ok ? '#22c55e' : (fail ? '#ef4444' : '#a1a1aa'));
+              const timeStr = r.createdAt ? new Date(r.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+              return `
+                <div class="agy-git-commit-item">
+                  <div style="display:flex;align-items:center;gap:6px;">
+                    <span style="color:${color};font-weight:700;">${icon}</span>
+                    <span style="font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.displayTitle)}">${escapeHtml(r.displayTitle)}</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-size:11px;opacity:0.74;">
+                    <span class="agy-git-ref-pill">${escapeHtml(r.workflowName)}</span>
+                    <span>${escapeHtml(r.headBranch)}</span>
+                    <span>· ${escapeHtml(r.event)}</span>
+                    ${timeStr ? `<span>· ${escapeHtml(timeStr)}</span>` : ''}
+                  </div>
+                  <div style="display:flex;align-items:center;justify-content:flex-end;gap:3px;">
+                    <button class="agy-git-icon-btn" data-wf-detail="${escapeHtml(String(r.databaseId))}">详情</button>
+                    ${running
+                      ? `<button class="agy-git-icon-btn" style="color:#f87171;" data-wf-cancel="${escapeHtml(String(r.databaseId))}" ${busy ? 'disabled' : ''}>取消</button>`
+                      : `
+                        ${fail ? `<button class="agy-git-icon-btn" data-wf-rerun-failed="${escapeHtml(String(r.databaseId))}" ${busy ? 'disabled' : ''}>重跑失败</button>` : ''}
+                        <button class="agy-git-icon-btn" data-wf-rerun="${escapeHtml(String(r.databaseId))}" ${busy ? 'disabled' : ''}>重跑</button>
+                      `}
+                  </div>
+                </div>
+              `;
+            }).join('') : '<div style="font-size:12px;opacity:0.6;">暂无工作流运行记录（点击右上角刷新，或先创建 GitHub Actions）</div>'}
           </div>
         ` : ''}
 
@@ -1199,7 +1275,72 @@
           } catch (err) { state.error = err.message; renderPopover(); }
         } else if (nextTab === 'tags' && state.repo) {
           try { state.tags = await callHost('tags', { repo: state.repo }); renderPopover(); } catch (err) { state.error = err.message; renderPopover(); }
+        } else if (nextTab === 'workflows' && state.repo) {
+          try {
+            const wfData = await callHost('workflows', { repo: state.repo, limit: 20 });
+            state.wfRuns = wfData.runs || [];
+            state.wfList = wfData.workflows || [];
+            renderPopover();
+          } catch (err) { state.error = err.message; renderPopover(); }
         }
+      });
+    });
+
+    pop.querySelector('#agy-git-wf-select')?.addEventListener('change', (e) => { state.selectedWfId = e.target.value; });
+    pop.querySelector('#agy-git-wf-refresh')?.addEventListener('click', () => {
+      runAction('刷新工作流', async () => {
+        const wfData = await callHost('workflows', { repo: state.repo, limit: 20 });
+        state.wfRuns = wfData.runs || [];
+        state.wfList = wfData.workflows || [];
+      });
+    });
+    pop.querySelector('#agy-git-wf-trigger')?.addEventListener('click', () => {
+      const wfId = pop.querySelector('#agy-git-wf-select')?.value || state.selectedWfId || String(state.wfList[0]?.id || '');
+      runAction('触发工作流', async () => {
+        const wfData = await callHost('triggerWorkflow', { repo: state.repo, workflowId: wfId, ref: state.status?.branch || '' });
+        state.wfRuns = wfData.runs || [];
+        state.wfList = wfData.workflows || [];
+        setToast('已触发工作流运行');
+      });
+    });
+    pop.querySelector('#agy-git-wf-close-detail')?.addEventListener('click', () => { state.selectedRun = null; renderPopover(); });
+    pop.querySelectorAll('[data-wf-detail]').forEach(el => {
+      el.addEventListener('click', async () => {
+        const runId = el.getAttribute('data-wf-detail');
+        try {
+          state.selectedRun = await callHost('workflowDetail', { repo: state.repo, runId });
+          renderPopover();
+        } catch (err) { state.error = err.message; renderPopover(); }
+      });
+    });
+    pop.querySelectorAll('[data-wf-rerun]').forEach(el => {
+      el.addEventListener('click', () => {
+        const runId = el.getAttribute('data-wf-rerun');
+        runAction('重跑工作流', async () => {
+          const wfData = await callHost('rerunWorkflow', { repo: state.repo, runId, failedOnly: false });
+          state.wfRuns = wfData.runs || [];
+          setToast('已提交重跑请求');
+        });
+      });
+    });
+    pop.querySelectorAll('[data-wf-rerun-failed]').forEach(el => {
+      el.addEventListener('click', () => {
+        const runId = el.getAttribute('data-wf-rerun-failed');
+        runAction('重跑失败任务', async () => {
+          const wfData = await callHost('rerunWorkflow', { repo: state.repo, runId, failedOnly: true });
+          state.wfRuns = wfData.runs || [];
+          setToast('已重跑失败的 Job');
+        });
+      });
+    });
+    pop.querySelectorAll('[data-wf-cancel]').forEach(el => {
+      el.addEventListener('click', () => {
+        const runId = el.getAttribute('data-wf-cancel');
+        runAction('取消工作流', async () => {
+          const wfData = await callHost('cancelWorkflow', { repo: state.repo, runId });
+          state.wfRuns = wfData.runs || [];
+          setToast('已请求取消工作流');
+        });
       });
     });
 
@@ -1376,7 +1517,7 @@
   }, 2000);
 
   globalThis.__agyGit = {
-    version: '1.6.0',
+    version: '1.7.0',
     dispose() {
       clearInterval(timer);
       document.removeEventListener('click', docClickHandler);

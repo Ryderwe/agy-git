@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   addRemoteAndPush,
+  cancelWorkflow,
   checkoutBranch,
   commitChanges,
   createGithubRepoAndPush,
@@ -20,17 +21,21 @@ import {
   getLog,
   getRemoteCommits,
   getStatus,
+  getWorkflowRunDetail,
   initRepo,
   listTags,
+  listWorkflowRuns,
   loadSettings,
   pullChanges,
   pushChanges,
   pushTag,
   removeIndexLock,
+  rerunWorkflow,
   resetToCommit,
   revertCommit,
   saveAiSettings,
   stageFiles,
+  triggerWorkflow,
   unstageFiles
 } from './git-ops.mjs';
 
@@ -133,6 +138,11 @@ async function handleRpc(method, params = {}) {
     case 'initRepo': return initRepo(params.path);
     case 'createGithubRepo': return createGithubRepoAndPush(params.repo, params);
     case 'addRemotePush': return addRemoteAndPush(params.repo, params.url);
+    case 'workflows': return listWorkflowRuns(params.repo, params.limit);
+    case 'workflowDetail': return getWorkflowRunDetail(params.repo, params.runId);
+    case 'rerunWorkflow': return rerunWorkflow(params.repo, params.runId, Boolean(params.failedOnly));
+    case 'cancelWorkflow': return cancelWorkflow(params.repo, params.runId);
+    case 'triggerWorkflow': return triggerWorkflow(params.repo, params.workflowId, params.ref);
     case 'generateCommitMsg': return generateCommitMessage(params.repo);
     case 'getAiSettings': return loadSettings().ai;
     case 'saveAiSettings': return saveAiSettings(params.ai);
@@ -291,7 +301,7 @@ async function pollCdp() {
       } else {
         try {
           const chk = await clients.get(target.id).client.send('Runtime.evaluate', {
-            expression: `Boolean(globalThis.__agyGit?.version === '1.6.0')`,
+            expression: `Boolean(globalThis.__agyGit?.version === '1.7.0')`,
             returnByValue: true
           });
           if (chk?.result?.value !== true) {

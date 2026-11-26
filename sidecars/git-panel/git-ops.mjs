@@ -576,6 +576,83 @@ export async function createGithubRepoAndPush(repoPath, { name = '', visibility 
   }
 }
 
+async function runGh(cwd, args, timeoutMs = 30000) {
+  try {
+    const { stdout, stderr } = await execFileAsync('gh', args, {
+      cwd,
+      timeout: timeoutMs,
+      maxBuffer: 10 * 1024 * 1024
+    });
+    return { stdout: stdout ?? '', stderr: stderr ?? '' };
+  } catch (err) {
+    const msg = (err.stderr || err.stdout || err.message || '').toString().trim();
+    if (/ENOENT|command not found/i.test(msg)) {
+      throw new Error('未检测到 GitHub CLI (gh)，请先安装 gh');
+    }
+    if (/auth login|not logged/i.test(msg)) {
+      throw new Error('GitHub CLI 未登录，请先在终端执行 gh auth login');
+    }
+    throw new Error(msg || 'GitHub CLI 执行失败');
+  }
+}
+
+export async function listWorkflowRuns(repoPath, limit = 20) {
+  const root = await resolveRepoRoot(repoPath);
+  const count = Math.min(Math.max(Number(limit) || 20, 1), 50);
+  const [runsRes, wfRes] = await Promise.all([
+    runGh(root, [
+      'run', 'list',
+      '--limit', String(count),
+      '--json', 'databaseId,displayTitle,workflowName,headBranch,status,conclusion,event,createdAt,updatedAt,url'
+    ]),
+    runGh(root, ['workflow', 'list', '--json', 'id,name,state,path']).catch(() => ({ stdout: '[]' }))
+  ]);
+  let runs = [];
+  let workflows = [];
+  try { runs = JSON.parse(runsRes.stdout || '[]'); } catch {}
+  try { workflows = JSON.parse(wfRes.stdout || '[]'); } catch {}
+  return { runs, workflows };
+}
+
+export async function getWorkflowRunDetail(repoPath, runId) {
+  const root = await resolveRepoRoot(repoPath);
+  const id = String(runId || '').trim();
+  if (!/^\d+$/.test(id)) throw new Error('无效的 Run ID');
+  const { stdout } = await runGh(root, [
+    'run', 'view', id,
+    '--json', 'jobs,url,status,conclusion,displayTitle,workflowName'
+  ]);
+  return JSON.parse(stdout || '{}');
+}
+
+export async function rerunWorkflow(repoPath, runId, failedOnly = false) {
+  const root = await resolveRepoRoot(repoPath);
+  const id = String(runId || '').trim();
+  if (!/^\d+$/.test(id)) throw new Error('无效的 Run ID');
+  const args = ['run', 'rerun', id];
+  if (failedOnly) args.push('--failed');
+  await runGh(root, args, 45000);
+  return listWorkflowRuns(root);
+}
+
+export async function cancelWorkflow(repoPath, runId) {
+  const root = await resolveRepoRoot(repoPath);
+  const id = String(runId || '').trim();
+  if (!/^\d+$/.test(id)) throw new Error('无效的 Run ID');
+  await runGh(root, ['run', 'cancel', id], 30000);
+  return listWorkflowRuns(root);
+}
+
+export async function triggerWorkflow(repoPath, workflowId, ref = '') {
+  const root = await resolveRepoRoot(repoPath);
+  const wf = String(workflowId || '').trim();
+  if (!wf) throw new Error('请选择要触发的工作流');
+  const args = ['workflow', 'run', wf];
+  if (ref && ref.trim()) args.push('--ref', ref.trim());
+  await runGh(root, args, 45000);
+  return listWorkflowRuns(root);
+}
+
 export async function generateCommitMessage(repoPath) {
   const root = await resolveRepoRoot(repoPath);
   const st = await getStatus(root);
