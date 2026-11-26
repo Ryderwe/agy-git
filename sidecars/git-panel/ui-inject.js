@@ -1,5 +1,5 @@
 (() => {
-  if (globalThis.__agyGit?.version === '1.5.1') return;
+  if (globalThis.__agyGit?.version === '1.5.2') return;
   try { globalThis.__agyGit?.dispose?.(); } catch {}
 
   const STYLE_ID = 'agy-git-styles';
@@ -1250,7 +1250,7 @@
   }, 2000);
 
   globalThis.__agyGit = {
-    version: '1.5.1',
+    version: '1.5.2',
     dispose() {
       clearInterval(timer);
       document.removeEventListener('click', docClickHandler);

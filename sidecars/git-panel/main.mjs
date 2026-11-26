@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { homedir } from 'node:os';
@@ -141,6 +141,36 @@ let missingPortPolls = 0;
 
 const DATA_DIR = join(homedir(), '.gemini', 'antigravity', 'plugin_data', 'agy-git');
 const RELAUNCH_STATE_FILE = join(DATA_DIR, 'relaunch-state.json');
+const PID_FILE = join(DATA_DIR, 'sidecar.pid');
+
+function acquireSingleInstanceLock() {
+  mkdirSync(DATA_DIR, { recursive: true });
+  try {
+    if (existsSync(PID_FILE)) {
+      const oldPid = Number(readFileSync(PID_FILE, 'utf8').trim());
+      if (Number.isInteger(oldPid) && oldPid > 1 && oldPid !== process.pid) {
+        try {
+          process.kill(oldPid, 'SIGTERM');
+        } catch {}
+      }
+    }
+  } catch {}
+  try {
+    writeFileSync(PID_FILE, String(process.pid), 'utf8');
+  } catch {}
+  const cleanupPid = () => {
+    try {
+      if (existsSync(PID_FILE) && Number(readFileSync(PID_FILE, 'utf8').trim()) === process.pid) {
+        unlinkSync(PID_FILE);
+      }
+    } catch {}
+  };
+  process.on('exit', cleanupPid);
+  process.on('SIGINT', () => { cleanupPid(); process.exit(0); });
+  process.on('SIGTERM', () => { cleanupPid(); process.exit(0); });
+}
+
+acquireSingleInstanceLock();
 
 function readRelaunchState() {
   try {
@@ -255,7 +285,7 @@ async function pollCdp() {
       } else {
         try {
           const chk = await clients.get(target.id).client.send('Runtime.evaluate', {
-            expression: `Boolean(globalThis.__agyGit?.version === '1.5.1')`,
+            expression: `Boolean(globalThis.__agyGit?.version === '1.5.2')`,
             returnByValue: true
           });
           if (chk?.result?.value !== true) {
