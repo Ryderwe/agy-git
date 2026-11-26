@@ -285,7 +285,7 @@ async function pollCdp() {
       } else {
         try {
           const chk = await clients.get(target.id).client.send('Runtime.evaluate', {
-            expression: `Boolean(globalThis.__agyGit?.version === '1.5.2')`,
+            expression: `Boolean(globalThis.__agyGit?.version === '1.5.3')`,
             returnByValue: true
           });
           if (chk?.result?.value !== true) {

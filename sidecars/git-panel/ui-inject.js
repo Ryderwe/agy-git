@@ -1,5 +1,5 @@
 (() => {
-  if (globalThis.__agyGit?.version === '1.5.2') return;
+  if (globalThis.__agyGit?.version === '1.5.3') return;
   try { globalThis.__agyGit?.dispose?.(); } catch {}
 
   const STYLE_ID = 'agy-git-styles';
@@ -674,7 +674,7 @@
                     <option value="staged" ${state.aiSettings.scope === 'staged' ? 'selected' : ''}>范围：仅已暂存改动</option>
                   </select>
                 </div>
-                <input class="agy-git-input" id="agy-git-ai-url" placeholder="Base URL，如 https://cn.aiapi.bot" value="${escapeHtml(state.aiSettings.baseUrl)}" />
+                <input class="agy-git-input" id="agy-git-ai-url" placeholder="Base URL，如 https://api.openai.com/v1" value="${escapeHtml(state.aiSettings.baseUrl)}" />
                 <div style="display:flex;gap:5px;">
                   <input class="agy-git-input" type="password" id="agy-git-ai-key" placeholder="API Key（本地 Ollama 可留空）" value="${escapeHtml(state.aiSettings.apiKey)}" />
                   <input class="agy-git-input" style="width:120px;" id="agy-git-ai-model" placeholder="模型名" value="${escapeHtml(state.aiSettings.model)}" />
@@ -1250,7 +1250,7 @@
   }, 2000);
 
   globalThis.__agyGit = {
-    version: '1.5.2',
+    version: '1.5.3',
     dispose() {
       clearInterval(timer);
       document.removeEventListener('click', docClickHandler);
