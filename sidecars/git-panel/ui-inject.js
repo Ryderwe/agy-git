@@ -1,5 +1,5 @@
 (() => {
-  if (globalThis.__agyGit?.version === '1.5.0') return;
+  if (globalThis.__agyGit?.version === '1.5.1') return;
   try { globalThis.__agyGit?.dispose?.(); } catch {}
 
   const STYLE_ID = 'agy-git-styles';
@@ -444,6 +444,9 @@
     const st = state.status;
     const branchText = st?.branch ? st.branch : 'Git';
     const totalChanges = st ? (st.staged.length + st.unstaged.length) : 0;
+    const renderKey = `${branchText}:${totalChanges}`;
+    if (btn.dataset.renderKey === renderKey) return;
+    btn.dataset.renderKey = renderKey;
     btn.innerHTML = `
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
         <line x1="6" y1="3" x2="6" y2="15"></line>
@@ -1247,7 +1250,7 @@
   }, 2000);
 
   globalThis.__agyGit = {
-    version: '1.5.0',
+    version: '1.5.1',
     dispose() {
       clearInterval(timer);
       document.removeEventListener('click', docClickHandler);

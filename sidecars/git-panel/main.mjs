@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -163,13 +163,23 @@ function recordCdpReady() {
   }
 }
 
+function hasDebugPortFlagInProcess() {
+  try {
+    const out = execFileSync('ps', ['-ax', '-o', 'args'], { encoding: 'utf8', timeout: 2000 });
+    return out.split('\n').some(line => /Antigravity/i.test(line) && line.includes('--remote-debugging-port'));
+  } catch {
+    return false;
+  }
+}
+
 function maybeAutoRelaunchMac() {
   if (process.platform !== 'darwin' || everConnected) return;
   if (!process.env.ANTIGRAVITY_LS_ADDRESS || process.env.ELECTRON_OZONE_PLATFORM_HINT === 'headless') return;
+  if (hasDebugPortFlagInProcess()) return;
   const now = Date.now();
   const state = readRelaunchState();
   if (state.lastLsAddress === process.env.ANTIGRAVITY_LS_ADDRESS) return;
-  if (state.lastAt && now - state.lastAt < 60000) return;
+  if (state.lastAt && now - state.lastAt < 120000) return;
   if ((state.consecutiveAutoRelaunches || 0) >= 2) return;
 
   const appCandidates = ['/Applications/Antigravity.app', join(homedir(), 'Applications', 'Antigravity.app')];
@@ -245,7 +255,7 @@ async function pollCdp() {
       } else {
         try {
           const chk = await clients.get(target.id).client.send('Runtime.evaluate', {
-            expression: `Boolean(globalThis.__agyGit?.version === '1.5.0')`,
+            expression: `Boolean(globalThis.__agyGit?.version === '1.5.1')`,
             returnByValue: true
           });
           if (chk?.result?.value !== true) {
@@ -261,7 +271,7 @@ async function pollCdp() {
     cdpConnected = clients.size > 0;
     if (!everConnected && !clients.size) {
       missingPortPolls++;
-      if (missingPortPolls >= 2) maybeAutoRelaunchMac();
+      if (missingPortPolls >= 4) maybeAutoRelaunchMac();
     }
   }
 }
